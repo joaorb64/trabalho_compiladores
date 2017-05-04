@@ -1,0 +1,17 @@
+S →  { Decl | Const | Nulo } 'main' {Comm} 'end'
+
+Comm → ( Att | Rep | T | Read | Write | Nulo )
+Decl → tipo id [= Exp] {, id [= Exp]};
+Const → 'const' id = Exp;
+Att → id = Exp;
+Rep → while '(' Exp ')' ( Comm | begin {Comm} end )
+T → if '(' Exp ')' then ( Comm | begin {Comm} end ) [ else ( Comm | begin {Comm} end ) ]
+Nulo → ;
+Read → readln(id);
+Write → ( write | writeln ) '(' Exp {, Exp} ')';
+
+Exp → ExpA {comparadorArit ExpA}
+ExpA → [(+|-)] ExpB { (+|-|or) ExpB }
+ExpB → ExpC {(*|/|and) ExpC}
+ExpC → [not] ExpD
+ExpD → '('Exp')' | id | const

@@ -1,0 +1,48 @@
+Lexema		|	Padrão de produção
+-------------------------------------------------------------------------------
+byte		|
+integer		|
+boolean		|
+string		|
+		|
+const		|	0h(d U l)(d U l)	U	d*.d+	U	d+
+ID		|	(l U _* (l U d) )(l U d U _)*
+		|
+true		|
+false		|
+		|
+const		|
+integer		|
+byte		|
+string		|
+while		|
+if		|
+else		|
+and		|
+or		|
+not		|
+=		|
+==		|
+(		|
+) 		|
+<		|
+>		|
+!=		|
+>=		|
+<=		|
+, 		|
++		|
+-		|
+*		|
+/		|
+;		|
+begin		|
+end		|
+then 		|
+readln		|
+main		|
+write		|
+writeln		|
+true		|
+false		|
+boolean		|
