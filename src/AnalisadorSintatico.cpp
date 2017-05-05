@@ -141,7 +141,18 @@ bool AnalisadorSintatico::Decl(){
 		//Checar se já foi declarado
 		if(token == "id"){
 			if(lex->t->FindSimbolo(lexema) == "NULL"){
-				lex->t->AddSimbolo(lexema, "id");
+				if(tipo == "string"){
+					lex->t->AddSimbolo(lexema, "id", CLASSE_VAR, TIPO_STRING);
+				}
+				else if(tipo == "integer"){
+					lex->t->AddSimbolo(lexema, "id", CLASSE_VAR, TIPO_INTEIRO);
+				}
+				else if(tipo == "boolean"){
+					lex->t->AddSimbolo(lexema, "id", CLASSE_VAR, TIPO_LOGICO);
+				}
+				else if(tipo == "byte"){
+					lex->t->AddSimbolo(lexema, "id", CLASSE_VAR, TIPO_BYTE);
+				}
 			}
 			else{
 				printf("%d:identificador ja declarado [%s].\n", linha, lexema.c_str());
@@ -192,6 +203,11 @@ bool AnalisadorSintatico::Att(){
 		printf("%d:identificador nao declarado [%s].\n", linha, lexema.c_str());
 		exit(0);
 	}
+	else if(lex->t->GetSimbolo(lexema)->classe == CLASSE_CONST){
+		printf("%d:classe de identificador incompatível [%s].\n", linha, lexema.c_str());
+		exit(0);
+	}
+
 	CasaToken("id");
 	CasaToken("=");
 	int *tipo = new int(-1);
@@ -305,19 +321,18 @@ bool AnalisadorSintatico::Exp(int *tipo){
 		int *tipoB = new int(-1);
 		ExpA(tipoB);
 
-		if(*tipo == TIPO_STRING && *tipoB == TIPO_STRING && lexe != "=="){
-			printf("%d:tipos incompatíveis.\n", linha);
-			exit(0);
+		if(*tipo != *tipoB){
+			if(!((*tipo == TIPO_INTEIRO || *tipo == TIPO_BYTE) && (*tipoB == TIPO_INTEIRO || *tipoB == TIPO_BYTE))){
+				printf("%d:tipos incompatíveis.\n", linha);
+				exit(0);
+			}
 		}
-		else if((*tipo == TIPO_INTEIRO || *tipo == TIPO_BYTE) && (*tipoB != TIPO_INTEIRO && *tipoB != TIPO_BYTE)){
-			printf("%d:tipos incompatíveis.\n", linha);
-			exit(0);
+		else{
+			if(*tipo == TIPO_STRING && *tipoB == TIPO_STRING && lexe != "=="){
+				printf("%d:tipos incompatíveis.\n", linha);
+				exit(0);
+			}
 		}
-		else if((*tipoB == TIPO_INTEIRO || *tipoB == TIPO_BYTE) && (*tipo != TIPO_INTEIRO && *tipo != TIPO_BYTE)){
-			printf("%d:tipos incompatíveis.\n", linha);
-			exit(0);
-		}
-		// TODO: Pensar em redundância nesses -else if-
 
 		*tipo = TIPO_LOGICO;
 	}
@@ -325,18 +340,53 @@ bool AnalisadorSintatico::Exp(int *tipo){
 
 // ExpA → [(+|-)] ExpB { (+|-|or) ExpB }
 bool AnalisadorSintatico::ExpA(int *tipo){
-	if(token == "+") CasaToken("+");
-	else if(token == "-") CasaToken("-");
+	bool negativo = false;
+
+	if(token == "+"){
+		CasaToken("+");
+	}
+	else if(token == "-"){
+		CasaToken("-");
+		negativo = true;
+	}
 
 	ExpB(tipo);
 
+	if(negativo) *tipo = TIPO_INTEIRO; //TODO: string n pode ser negativada
+
 	while(token == "+" || token == "-" || token == "or"){
-		if(token == "+") CasaToken("+");
+		bool soma = false;
+
+		if(token == "+"){
+			CasaToken("+");
+			soma = true;
+		}
 		else if(token == "-") CasaToken("-");
 		else if(token == "or") CasaToken("or");
 
 		int *tipoB = new int(-1);
 		ExpB(tipoB);
+
+		if(*tipo != *tipoB){
+			if((*tipo != TIPO_BYTE && *tipo != TIPO_INTEIRO) || (*tipoB != TIPO_BYTE && *tipoB != TIPO_INTEIRO)) {
+				printf("%d:tipos incompatíveis.\n", linha);
+				exit(0);
+			}
+			else{
+				*tipo = TIPO_INTEIRO;
+			}
+		}
+		else{
+			if(*tipo == TIPO_STRING && *tipoB == TIPO_STRING && soma == false){
+				printf("%d:tipos incompatíveis.\n", linha);
+				exit(0);
+			}
+		}
+
+		if(*tipo == TIPO_LOGICO || *tipoB == TIPO_LOGICO){
+			printf("%d:tipos incompatíveis.\n", linha);
+			exit(0);
+		}
 	}
 }
 
@@ -345,6 +395,8 @@ bool AnalisadorSintatico::ExpB(int *tipo){
 	ExpC(tipo);
 
 	while(token == "*" || token=="/" || token=="and"){
+		string lexe = token;
+
 		if(token == "*") CasaToken("*");
 		else if(token == "/") CasaToken("/");
 		else if(token == "and") CasaToken("and");
@@ -352,10 +404,34 @@ bool AnalisadorSintatico::ExpB(int *tipo){
 		int *tipoB = new int(-1);
 		ExpC(tipoB);
 
-		/*if(*tipo == TIPO_STRING || *tipoB == TIPO_STRING) {
-			printf("%d:tipos incompatíveis.\n", linha);
-			exit(0);
-		}*/
+		// TODO: perguntar se pode dividir
+		if(lexe == "/"){
+			if(*tipo == TIPO_BYTE || *tipo == TIPO_INTEIRO){
+				*tipo = TIPO_INTEIRO;
+			}
+			else{
+				printf("%d:tipos incompatíveis.\n", linha);
+				exit(0);
+			}
+
+			if(*tipoB == TIPO_BYTE || *tipoB == TIPO_INTEIRO){
+				*tipoB = TIPO_INTEIRO;
+			}
+			else{
+				printf("%d:tipos incompatíveis.\n", linha);
+				exit(0);
+			}
+		}
+
+		if(*tipo != *tipoB){
+			if((*tipo != TIPO_BYTE && *tipo != TIPO_INTEIRO) || (*tipoB != TIPO_BYTE && *tipoB != TIPO_INTEIRO)) {
+				printf("%d:tipos incompatíveis.\n", linha);
+				exit(0);
+			}
+			else{
+				*tipo = TIPO_INTEIRO;
+			}
+		}
 	}
 }
 
