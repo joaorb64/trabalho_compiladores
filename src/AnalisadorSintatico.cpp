@@ -4,6 +4,7 @@ AnalisadorSintatico::AnalisadorSintatico(AnalisadorLexico *lex){
 	this->lex = lex;
 	fim = false;
 	lex->LerToken();
+	out = fopen ("out.asm", "w");
 }
 
 //procedimento CasaToken [...]
@@ -126,6 +127,15 @@ bool AnalisadorSintatico::Decl(){
 			exit(0);
 		}
 	}
+
+	fprintf(out, "\n; >>Declaracao [%s]\n", lexema.c_str());
+	fprintf(out, "dseg SEGMENT PUBLIC ;início seg. dados\n");
+	fprintf(out, "byte 4000h DUP(?) ;temporários\n");
+	fprintf(out, "byte ? ;var. byte em 4000h\n");
+	fprintf(out, "byte 100h DUP(?) ;var. string em 4001h\n");
+	fprintf(out, "sword ? ;var. int em 4101h\n");
+	fprintf(out, "byte ? ;var. boolean em 4103h\n");
+	fprintf(out, "dseg ENDS ;fim seg. dados\n");
 
 	CasaToken("id");
 

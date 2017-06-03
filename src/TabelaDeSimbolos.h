@@ -14,6 +14,7 @@ struct Simbolo {
 	string token;
 	int classe;
 	int tipo;
+	int endereco;
 };
 
 class TabelaDeSimbolos {

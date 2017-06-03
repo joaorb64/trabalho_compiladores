@@ -15,11 +15,15 @@ using namespace std;
 /* --Definindo variáveis globais-- */
 //arquivo do programa-fonte
 FILE* src;
+
 int linha;
 
 //registro único de escopo global contendo campo para o número do token
 string token;
 int numero_do_token;
+
+//variável global para memória de dados
+int memoria;
 
 //lexema
 string lexema;

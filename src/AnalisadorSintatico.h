@@ -20,6 +20,9 @@ class AnalisadorSintatico {
 
     bool fim;
 
+    //arquivo de saida
+    FILE* out;
+
     //Referencia a um AnalisadorLexico
     AnalisadorLexico *lex;
 
