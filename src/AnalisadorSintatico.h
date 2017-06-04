@@ -50,11 +50,17 @@ class AnalisadorSintatico {
     bool Read();
 		bool Write();
 
-		bool Exp(int *tipo);
-		bool ExpA(int *tipo);
-    bool ExpB(int *tipo);
-    bool ExpC(int *tipo);
-    bool ExpD(int *tipo);
+		bool Exp(int *tipo, int *endereco);
+		bool ExpA(int *tipo, int *endereco);
+    bool ExpB(int *tipo, int *endereco);
+    bool ExpC(int *tipo, int *endereco);
+    bool ExpD(int *tipo, int *endereco);
+
+    //retorna o endereço de um novo temporário
+    int NovoTemp(int tamanho);
+
+    //retorna o endereço de um novo rótulo
+    int NovoRot();
 };
 
 #endif

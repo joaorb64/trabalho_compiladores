@@ -7,6 +7,20 @@ AnalisadorSintatico::AnalisadorSintatico(AnalisadorLexico *lex){
 	out = fopen ("out.asm", "w");
 }
 
+//retorna o endereço de um novo temporário
+int AnalisadorSintatico::NovoTemp(int tamanho){
+	int resposta = memoriaTemp;
+	memoriaTemp += tamanho;
+	return resposta;
+}
+
+//retorna o endereço de um novo rótulo
+int AnalisadorSintatico::NovoRot(){
+	int resposta = rotulo;
+	rotulo += 1;
+	return resposta;
+}
+
 //procedimento CasaToken [...]
 //receber como parâmetro o token esperado pela gramática
 //compará-lo com o token corrente
@@ -57,7 +71,10 @@ bool AnalisadorSintatico::CasaToken(string expectedToken){
 // S →  { Decl | Const | Nulo } 'main' {Comm} 'end'
 bool AnalisadorSintatico::S(){
 	fprintf(out, "dseg SEGMENT PUBLIC; inicio seg. dados;\n	byte 4000h DUP(?); temporarios\n");
+	fprintf(out, "dseg ENDS;\n");
 	memoria = 16384;
+	memoriaTemp = 0;
+	rotulo = 0;
 
 	while(token == "decl" || token == "decl_const" || token == ";"){
 		if(token == "decl"){
@@ -70,8 +87,6 @@ bool AnalisadorSintatico::S(){
 			Nulo();
 		}
 	}
-
-	fprintf(out, "dseg ENDS; fim seg. dados\n");
 
 	CasaToken("main");
 	while(token == "id" || token == "while" || token == "if" || token == "readln" || token == "write" || token == "writeln" || token == ";"){
@@ -108,9 +123,16 @@ bool AnalisadorSintatico::Comm(){
 
 // Decl → tipo id [= Exp] {, id [= Exp]};
 bool AnalisadorSintatico::Decl(){
+	//TODO: checagem de tipos!!
+
 	string tipo = lexema;
+	string lexe;
 
 	CasaToken("decl");
+
+	lexe = lexema;
+
+	fprintf(out, "dseg SEGMENT PUBLIC\n");
 
 	//Checar se já foi declarado
 	if(token == "id"){
@@ -142,16 +164,57 @@ bool AnalisadorSintatico::Decl(){
 		}
 	}
 
+	fprintf(out, "dseg ENDS;\n");
+
 	CasaToken("id");
 
 	if(token == "="){
 		CasaToken("=");
 		int *tipo = new int(-1);
-		Exp(tipo);
+		int *end = new int(-1);
+		bool converter = false;
+		Exp(tipo, end);
+
+		if(*tipo != lex->t->GetSimbolo(lexe)->tipo){
+			if(*tipo == TIPO_BYTE && lex->t->GetSimbolo(lexe)->tipo == TIPO_INTEIRO){
+				converter = true;
+			}
+			else{
+				printf("%d:tipos incompatíveis.\n", linha);
+				exit(0);
+			}
+		}
+
+		std::stringstream ssA, ssB;
+		ssA << std::uppercase << std::hex << lex->t->GetSimbolo(lexe)->endereco;
+		ssB << std::uppercase << std::hex << *end;
+
+		string regB;
+
+		if(*tipo == TIPO_INTEIRO){
+			regB = "BX";
+		}
+		else{
+			regB = "BL";
+
+			if(converter){
+				fprintf(out, "	mov BH, 0\n");
+			}
+		}
+
+		fprintf(out, "	mov %s, DS:[%s]\n", regB.c_str(), ssB.str().c_str());
+
+		if(converter){
+			regB = "BX";
+		}
+
+		fprintf(out, "	mov DS:[%s], %s\n", ssA.str().c_str(), regB.c_str());
 	}
 
 	while (token == ",") {
 		CasaToken(",");
+
+		fprintf(out, "dseg SEGMENT PUBLIC\n");
 
 		//Checar se já foi declarado
 		if(token == "id"){
@@ -183,10 +246,49 @@ bool AnalisadorSintatico::Decl(){
 
 		CasaToken("id");
 
+		fprintf(out, "dseg ENDS;\n");
+
 		if(token == "="){
 			CasaToken("=");
 			int *tipo = new int(-1);
-			Exp(tipo);
+			int *end = new int(-1);
+			bool converter = false;
+			Exp(tipo, end);
+
+			if(*tipo != lex->t->GetSimbolo(lexe)->tipo){
+				if(*tipo == TIPO_BYTE && lex->t->GetSimbolo(lexe)->tipo == TIPO_INTEIRO){
+					converter = true;
+				}
+				else{
+					printf("%d:tipos incompatíveis.\n", linha);
+					exit(0);
+				}
+			}
+
+			std::stringstream ssA, ssB;
+			ssA << std::uppercase << std::hex << lex->t->GetSimbolo(lexe)->endereco;
+			ssB << std::uppercase << std::hex << *end;
+
+			string regB;
+
+			if(*tipo == TIPO_INTEIRO){
+				regB = "BX";
+			}
+			else{
+				regB = "BL";
+
+				if(converter){
+					fprintf(out, "	mov BH, 0\n");
+				}
+			}
+
+			fprintf(out, "	mov %s, DS:[%s]\n", regB.c_str(), ssB.str().c_str());
+
+			if(converter){
+				regB = "BX";
+			}
+
+			fprintf(out, "	mov DS:[%s], %s\n", ssA.str().c_str(), regB.c_str());
 		}
 	}
 
@@ -204,18 +306,20 @@ bool AnalisadorSintatico::Const(){
 	CasaToken("id");
 	CasaToken("=");
 	int *tipo = new int(-1);
+	int *end = new int(-1);
 	valor = lexema;
-	Exp(tipo);
+	Exp(tipo, end);
 	CasaToken(";");
+
+	fprintf(out, "dseg SEGMENT PUBLIC\n");
 
 	//Checar se já foi declarado
 	if(tok == "id"){
 		if(lex->t->FindSimbolo(lexe) == "NULL"){
-			lex->t->AddSimbolo(lexe, "id", CLASSE_CONST, *tipo);
-
 			std::stringstream ss;
 			ss << std::uppercase << std::hex << memoria;
-			std::locale loc;
+
+			lex->t->AddSimbolo(lexe, "id", CLASSE_CONST, *tipo);
 
 			if(*tipo == TIPO_STRING){
 				fprintf(out, "	byte \"%s$\"; byte [%s] em %sh\n", valor.c_str(), lexe.c_str(), ss.str().c_str());
@@ -236,10 +340,30 @@ bool AnalisadorSintatico::Const(){
 			exit(0);
 		}
 	}
+
+	fprintf(out, "dseg ENDS;\n");
+
+	std::stringstream ssA, ssB;
+	ssA << std::uppercase << std::hex << lex->t->GetSimbolo(lexe)->endereco;
+	ssB << std::uppercase << std::hex << *end;
+
+	string regB;
+
+	if(*tipo == TIPO_INTEIRO){
+		regB = "BX";
+	}
+	else{
+		regB = "BL";
+	}
+
+	fprintf(out, "	mov %s, DS:[%s]\n", regB.c_str(), ssB.str().c_str());
+	fprintf(out, "	mov DS:[%s], %s\n", ssA.str().c_str(), regB.c_str());
 }
 
 // Att → id = Exp;
 bool AnalisadorSintatico::Att(){
+	fprintf(out, ";[Att]\n");
+
 	if(lex->t->FindSimbolo(lexema) == "NULL"){
 		printf("%d:identificador nao declarado [%s].\n", linha, lexema.c_str());
 		exit(0);
@@ -249,11 +373,53 @@ bool AnalisadorSintatico::Att(){
 		exit(0);
 	}
 
+	string lexe = lexema;
+
 	CasaToken("id");
 	CasaToken("=");
 	int *tipo = new int(-1);
-	Exp(tipo);
+	int *end = new int(-1);
+	Exp(tipo, end);
+
+	bool converter = false;
+
+	if(lex->t->GetSimbolo(lexe)->tipo != *tipo){
+		if(lex->t->GetSimbolo(lexe)->tipo == TIPO_INTEIRO && *tipo == TIPO_BYTE){
+			converter = true;
+		}
+		else{
+			printf("%d:tipos incompatíveis.\n", linha);
+			exit(0);
+		}
+	}
+
 	CasaToken(";");
+
+	std::stringstream ssA, ssB;
+	std::locale loc;
+	ssA << std::uppercase << std::hex << lex->t->GetSimbolo(lexema)->endereco;
+	ssB << std::uppercase << std::hex << *end;
+
+	string regB;
+
+	if(*tipo == TIPO_INTEIRO){
+		regB = "BX";
+	}
+	else{
+		regB = "BL";
+
+		if(converter){
+			fprintf(out, "	mov BH, 0\n");
+		}
+	}
+
+	fprintf(out, "	mov %s, DS:[%s]\n", regB.c_str(), ssB.str().c_str());
+
+	if(converter){
+		regB = "BX";
+	}
+
+	fprintf(out, "	mov DS:[%s], %s\n", ssA.str().c_str(), regB.c_str());
 }
 
 // Write → ( write | writeln ) '(' Exp {, Exp} ')';
@@ -267,12 +433,14 @@ bool AnalisadorSintatico::Write(){
 
 	CasaToken("(");
 	int *tipo = new int(-1);
-	Exp(tipo);
+	int *end = new int(-1);
+	Exp(tipo, end);
 
 	while(token == ","){
 		CasaToken(",");
 		int *tipoB = new int(-1);
-		Exp(tipoB);
+		int *endB = new int(-1);
+		Exp(tipoB, endB);
 	}
 
 	CasaToken(")");
@@ -293,10 +461,29 @@ bool AnalisadorSintatico::Rep(){
 	CasaToken("while");
 	CasaToken("(");
 
-	int *tipo = new int(-1);
+	int rotInicio = NovoRot();
+	int rotFim = NovoRot();
 
-	Exp(tipo);
+	fprintf(out, ";[While]\n");
+	fprintf(out, "R%d:\n", rotInicio);
+
+	int *tipo = new int(-1);
+	int *end = new int(-1);
+
+	Exp(tipo, end);
 	CasaToken(")");
+
+	if(*tipo != TIPO_LOGICO){
+		printf("%d:tipos incompatíveis.\n", linha);
+		exit(0);
+	}
+
+	std::stringstream ss;
+	ss << std::uppercase << std::hex << *end;
+
+	fprintf(out, "	mov AL, DS:[%s]\n", ss.str().c_str());
+	fprintf(out, "	cmp AL, FFh\n");
+	fprintf(out, "	jne R%d\n", rotFim);
 
 	if(token != "begin"){
 		Comm();
@@ -308,15 +495,38 @@ bool AnalisadorSintatico::Rep(){
 		}
 		CasaToken("end");
 	}
+
+	fprintf(out, "R%d:\n", rotFim);
+	fprintf(out, ";[While fim]\n");
 }
 
 // T → if ( Exp ) then ( Comm | begin {Comm} end ) [ else ( Comm | begin {Comm} end ) ]
 bool AnalisadorSintatico::T(){
+	fprintf(out, ";[if]\n");
+
 	CasaToken("if");
 	CasaToken("(");
+
+	int rotFalso = NovoRot();
+	int rotFim = NovoRot();
+
 	int *tipo = new int(-1);
-	Exp(tipo);
+	int *end = new int(-1);
+	Exp(tipo, end);
 	CasaToken(")");
+
+	if(*tipo != TIPO_LOGICO){
+		printf("%d:tipos incompatíveis.\n", linha);
+		exit(0);
+	}
+
+	std::stringstream ss;
+	ss << std::uppercase << std::hex << *end;
+
+	fprintf(out, "	mov AL, DS:[%s]\n", ss.str().c_str());
+	fprintf(out, "	cmp AL, FFh\n");
+	fprintf(out, "	jne R%d\n", rotFalso);
+
 	CasaToken("then");
 
 	if(token == "begin"){
@@ -329,6 +539,9 @@ bool AnalisadorSintatico::T(){
 	else{
 		Comm();
 	}
+
+	fprintf(out, "	jmp R%d\n", rotFim);
+	fprintf(out, "	R%d:\n", rotFalso);
 
 	if(token == "else"){
 		CasaToken("else");
@@ -344,6 +557,10 @@ bool AnalisadorSintatico::T(){
 			Comm();
 		}
 	}
+
+	fprintf(out, "	R%d:\n", rotFim);
+
+	fprintf(out, ";[if fim]\n");
 }
 
 // Nulo → ;
@@ -352,15 +569,19 @@ bool AnalisadorSintatico::Nulo(){
 }
 
 // Exp → ExpA {comparadorArit ExpA}
-bool AnalisadorSintatico::Exp(int *tipo){
-	ExpA(tipo);
+bool AnalisadorSintatico::Exp(int *tipo, int *endereco){
+	fprintf(out, ";[EXP]\n");
+	memoriaTemp = 0;
+
+	ExpA(tipo, endereco);
 
 	while(token == "comp"){
 		string lexe = lexema;
 
 		CasaToken("comp");
 		int *tipoB = new int(-1);
-		ExpA(tipoB);
+		int *endB = new int(-1);
+		ExpA(tipoB, endB);
 
 		if(*tipo != *tipoB){
 			if(!((*tipo == TIPO_INTEIRO || *tipo == TIPO_BYTE) && (*tipoB == TIPO_INTEIRO || *tipoB == TIPO_BYTE))){
@@ -377,10 +598,12 @@ bool AnalisadorSintatico::Exp(int *tipo){
 
 		*tipo = TIPO_LOGICO;
 	}
+
+	fprintf(out, ";[fim EXP]\n");
 }
 
 // ExpA → [(+|-)] ExpB { (+|-|or) ExpB }
-bool AnalisadorSintatico::ExpA(int *tipo){
+bool AnalisadorSintatico::ExpA(int *tipo, int *endereco){
 	bool negativo = false;
 
 	if(token == "+"){
@@ -391,7 +614,7 @@ bool AnalisadorSintatico::ExpA(int *tipo){
 		negativo = true;
 	}
 
-	ExpB(tipo);
+	ExpB(tipo, endereco);
 
 	if(negativo) *tipo = TIPO_INTEIRO; //TODO: string n pode ser negativada
 
@@ -406,7 +629,8 @@ bool AnalisadorSintatico::ExpA(int *tipo){
 		else if(token == "or") CasaToken("or");
 
 		int *tipoB = new int(-1);
-		ExpB(tipoB);
+		int *endB = new int(-1);
+		ExpB(tipoB, endB);
 
 		if(*tipo != *tipoB){
 			if((*tipo != TIPO_BYTE && *tipo != TIPO_INTEIRO) || (*tipoB != TIPO_BYTE && *tipoB != TIPO_INTEIRO)) {
@@ -432,8 +656,8 @@ bool AnalisadorSintatico::ExpA(int *tipo){
 }
 
 // ExpB → ExpC {(*|/|and) ExpC}
-bool AnalisadorSintatico::ExpB(int *tipo){
-	ExpC(tipo);
+bool AnalisadorSintatico::ExpB(int *tipo, int *endereco){
+	ExpC(tipo, endereco);
 
 	while(token == "*" || token=="/" || token=="and"){
 		string lexe = token;
@@ -443,9 +667,9 @@ bool AnalisadorSintatico::ExpB(int *tipo){
 		else if(token == "and") CasaToken("and");
 
 		int *tipoB = new int(-1);
-		ExpC(tipoB);
+		int *endB = new int(-1);
+		ExpC(tipoB, endB);
 
-		// TODO: perguntar se pode dividir
 		if(lexe == "/"){
 			if(*tipo == TIPO_BYTE || *tipo == TIPO_INTEIRO){
 				*tipo = TIPO_INTEIRO;
@@ -464,6 +688,13 @@ bool AnalisadorSintatico::ExpB(int *tipo){
 			}
 		}
 
+		if(lexe == "and"){
+			if(*tipo != TIPO_LOGICO || *tipoB != TIPO_LOGICO){
+				printf("%d:tipos incompatíveis.\n", linha);
+				exit(0);
+			}
+		}
+
 		if(*tipo != *tipoB){
 			if((*tipo != TIPO_BYTE && *tipo != TIPO_INTEIRO) || (*tipoB != TIPO_BYTE && *tipoB != TIPO_INTEIRO)) {
 				printf("%d:tipos incompatíveis.\n", linha);
@@ -473,22 +704,76 @@ bool AnalisadorSintatico::ExpB(int *tipo){
 				*tipo = TIPO_INTEIRO;
 			}
 		}
+
+		std::stringstream ssA, ssB;
+		std::locale loc;
+		ssA << std::uppercase << std::hex << *endereco;
+		ssB << std::uppercase << std::hex << *endB;
+
+		string regA, regB;
+
+		if(*tipo == TIPO_INTEIRO){
+			regA = "AX";
+		}
+		else{
+			regA = "AL";
+		}
+
+		if(*tipoB == TIPO_INTEIRO){
+			regB = "BX";
+		}
+		else{
+			regB = "BL";
+		}
+
+		fprintf(out, "	mov %s, DS:[%s]\n", regA.c_str(), ssA.str().c_str());
+		fprintf(out, "	mov %s, DS:[%s]\n", regB.c_str(), ssB.str().c_str());
+		// TODO: Verificar necessidade de conversão?
+		if(lexe == "and"){
+			fprintf(out, "	mov %s, DS:[%s]\n", regB.c_str(), ssA.str().c_str());
+		}
+		else if(lexe == "*"){
+			fprintf(out, "	mov %s, DS:[%s]\n", regB.c_str(), ssA.str().c_str());
+		}
+		else if(lexe == "/"){
+			fprintf(out, "	mov %s, DS:[%s]\n", regB.c_str(), ssA.str().c_str());
+		}
+
+		fprintf(out, "	mov DS:[%s], %s\n", ssA.str().c_str(), regA.c_str());
 	}
 }
 
 // ExpC → [not]ExpD
-bool AnalisadorSintatico::ExpC(int *tipo){
+bool AnalisadorSintatico::ExpC(int *tipo, int *endereco){
+	bool negado = false;
+
 	if(token == "not"){
 		CasaToken("not");
+		negado = true;
 	}
-	ExpD(tipo);
+	ExpD(tipo, endereco);
+
+	if(negado){
+		if(*tipo != TIPO_LOGICO) {
+			printf("%d:tipos incompatíveis.\n", linha);
+			exit(0);
+		}
+
+		std::stringstream ss;
+		std::locale loc;
+		ss << std::uppercase << std::hex << *endereco;
+
+		fprintf(out, "	mov AL, DS:[%s]\n", ss.str().c_str());
+		fprintf(out, "	not AL\n");
+		fprintf(out, "	mov DS:[%s], AL\n", ss.str().c_str());
+	}
 }
 
 // ExpD → '('Exp')' | id | const
-bool AnalisadorSintatico::ExpD(int *tipo){
+bool AnalisadorSintatico::ExpD(int *tipo, int *endereco){
 	if(token == "("){
 		CasaToken("(");
-		Exp(tipo);
+		Exp(tipo, endereco);
 		CasaToken(")");
 	}
 	else if(token == "id"){
@@ -498,10 +783,40 @@ bool AnalisadorSintatico::ExpD(int *tipo){
 		}
 
 		*tipo = lex->t->GetSimbolo(lexema)->tipo;
+		*endereco = lex->t->GetSimbolo(lexema)->endereco;
 		CasaToken("id");
 	}
 	else{
 		*tipo = tipo_constante;
+
+		std::stringstream ss;
+		std::locale loc;
+
+		if(tipo_constante == TIPO_STRING){
+			ss << std::uppercase << std::hex << memoria;
+
+			fprintf(out, "dseg SEGMENT PUBLIC\n");
+			fprintf(out, "	byte \"%s$\"; (Exp) string em %sh\n", lexema.c_str(), ss.str().c_str());
+			fprintf(out, "dseg ENDS\n");
+
+			*endereco = memoria;
+			memoria += lexema.length() + 1;
+		}
+		else{
+			ss << std::uppercase << std::hex << memoriaTemp;
+
+			if(tipo_constante == TIPO_INTEIRO){
+				*endereco = NovoTemp(2);
+				fprintf(out, "	mov AX, %s\n", lexema.c_str());
+				fprintf(out, "	mov DS:[%s], AX\n", ss.str().c_str());
+			}
+			else{
+				*endereco = NovoTemp(1);
+				fprintf(out, "	mov AL, %s\n", lexema.c_str());
+				fprintf(out, "	mov DS:[%s], AL\n", ss.str().c_str());
+			}
+		}
+
 		CasaToken("const");
 	}
 }

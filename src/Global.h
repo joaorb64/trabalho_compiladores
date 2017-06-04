@@ -27,6 +27,8 @@ extern string lexema;
 extern int posicao;
 
 extern int memoria;
+extern int memoriaTemp;
+extern int rotulo;
 
 //tipo (somente para o token constante)
 enum TIPO{ TIPO_INTEIRO, TIPO_LOGICO, TIPO_BYTE, TIPO_STRING };

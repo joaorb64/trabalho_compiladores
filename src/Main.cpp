@@ -25,6 +25,12 @@ int numero_do_token;
 //variável global para memória de dados
 int memoria;
 
+//variável global para memória de temporários
+int memoriaTemp;
+
+//contador de rótulos
+int rotulo;
+
 //lexema
 string lexema;
 
