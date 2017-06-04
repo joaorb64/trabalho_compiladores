@@ -56,6 +56,9 @@ bool AnalisadorSintatico::CasaToken(string expectedToken){
 
 // S →  { Decl | Const | Nulo } 'main' {Comm} 'end'
 bool AnalisadorSintatico::S(){
+	fprintf(out, "dseg SEGMENT PUBLIC; inicio seg. dados;\n	byte 4000h DUP(?); temporarios\n");
+	memoria = 16384;
+
 	while(token == "decl" || token == "decl_const" || token == ";"){
 		if(token == "decl"){
 			Decl();
@@ -67,6 +70,9 @@ bool AnalisadorSintatico::S(){
 			Nulo();
 		}
 	}
+
+	fprintf(out, "dseg ENDS; fim seg. dados\n");
+
 	CasaToken("main");
 	while(token == "id" || token == "while" || token == "if" || token == "readln" || token == "write" || token == "writeln" || token == ";"){
 		Comm();
@@ -108,18 +114,26 @@ bool AnalisadorSintatico::Decl(){
 
 	//Checar se já foi declarado
 	if(token == "id"){
+		std::stringstream ss;
+		ss << std::uppercase << std::hex << memoria;
+		std::locale loc;
+
 		if(lex->t->FindSimbolo(lexema) == "NULL"){
 			if(tipo == "string"){
 				lex->t->AddSimbolo(lexema, "id", CLASSE_VAR, TIPO_STRING);
+				fprintf(out, "	byte 100h DUP(?); string [%s] em %sh\n", lexema.c_str(), ss.str().c_str());
 			}
 			else if(tipo == "integer"){
 				lex->t->AddSimbolo(lexema, "id", CLASSE_VAR, TIPO_INTEIRO);
+				fprintf(out, "	sword ?; inteiro [%s] em %sh\n", lexema.c_str(), ss.str().c_str());
 			}
 			else if(tipo == "boolean"){
 				lex->t->AddSimbolo(lexema, "id", CLASSE_VAR, TIPO_LOGICO);
+				fprintf(out, "	byte ?; boolean [%s] em %sh\n", lexema.c_str(), ss.str().c_str());
 			}
 			else if(tipo == "byte"){
 				lex->t->AddSimbolo(lexema, "id", CLASSE_VAR, TIPO_BYTE);
+				fprintf(out, "	byte ?; byte [%s] em %sh\n", lexema.c_str(), ss.str().c_str());
 			}
 		}
 		else{
@@ -127,15 +141,6 @@ bool AnalisadorSintatico::Decl(){
 			exit(0);
 		}
 	}
-
-	fprintf(out, "\n; >>Declaracao [%s]\n", lexema.c_str());
-	fprintf(out, "dseg SEGMENT PUBLIC ;início seg. dados\n");
-	fprintf(out, "byte 4000h DUP(?) ;temporários\n");
-	fprintf(out, "byte ? ;var. byte em 4000h\n");
-	fprintf(out, "byte 100h DUP(?) ;var. string em 4001h\n");
-	fprintf(out, "sword ? ;var. int em 4101h\n");
-	fprintf(out, "byte ? ;var. boolean em 4103h\n");
-	fprintf(out, "dseg ENDS ;fim seg. dados\n");
 
 	CasaToken("id");
 
@@ -150,19 +155,25 @@ bool AnalisadorSintatico::Decl(){
 
 		//Checar se já foi declarado
 		if(token == "id"){
-			if(lex->t->FindSimbolo(lexema) == "NULL"){
-				if(tipo == "string"){
-					lex->t->AddSimbolo(lexema, "id", CLASSE_VAR, TIPO_STRING);
-				}
-				else if(tipo == "integer"){
-					lex->t->AddSimbolo(lexema, "id", CLASSE_VAR, TIPO_INTEIRO);
-				}
-				else if(tipo == "boolean"){
-					lex->t->AddSimbolo(lexema, "id", CLASSE_VAR, TIPO_LOGICO);
-				}
-				else if(tipo == "byte"){
-					lex->t->AddSimbolo(lexema, "id", CLASSE_VAR, TIPO_BYTE);
-				}
+			std::stringstream ss;
+			ss << std::uppercase << std::hex << memoria;
+			std::locale loc;
+
+			if(tipo == "string"){
+				lex->t->AddSimbolo(lexema, "id", CLASSE_VAR, TIPO_STRING);
+				fprintf(out, "	byte 100h DUP(?); string [%s] em %sh\n", lexema.c_str(), ss.str().c_str());
+			}
+			else if(tipo == "integer"){
+				lex->t->AddSimbolo(lexema, "id", CLASSE_VAR, TIPO_INTEIRO);
+				fprintf(out, "	sword ?; inteiro [%s] em %sh\n", lexema.c_str(), ss.str().c_str());
+			}
+			else if(tipo == "boolean"){
+				lex->t->AddSimbolo(lexema, "id", CLASSE_VAR, TIPO_LOGICO);
+				fprintf(out, "	byte ?; boolean [%s] em %sh\n", lexema.c_str(), ss.str().c_str());
+			}
+			else if(tipo == "byte"){
+				lex->t->AddSimbolo(lexema, "id", CLASSE_VAR, TIPO_BYTE);
+				fprintf(out, "	byte ?; byte [%s] em %sh\n", lexema.c_str(), ss.str().c_str());
 			}
 			else{
 				printf("%d:identificador ja declarado [%s].\n", linha, lexema.c_str());
@@ -188,10 +199,12 @@ bool AnalisadorSintatico::Const(){
 
 	string tok = token;
 	string lexe = lexema;
+	string valor = "";
 
 	CasaToken("id");
 	CasaToken("=");
 	int *tipo = new int(-1);
+	valor = lexema;
 	Exp(tipo);
 	CasaToken(";");
 
@@ -199,6 +212,24 @@ bool AnalisadorSintatico::Const(){
 	if(tok == "id"){
 		if(lex->t->FindSimbolo(lexe) == "NULL"){
 			lex->t->AddSimbolo(lexe, "id", CLASSE_CONST, *tipo);
+
+			std::stringstream ss;
+			ss << std::uppercase << std::hex << memoria;
+			std::locale loc;
+
+			if(*tipo == TIPO_STRING){
+				fprintf(out, "	byte \"%s$\"; byte [%s] em %sh\n", valor.c_str(), lexe.c_str(), ss.str().c_str());
+				memoria += valor.length() + 1;
+			}
+			else if(*tipo == TIPO_INTEIRO){
+				fprintf(out, "	sword ?; inteiro [%s] em %sh\n", lexe.c_str(), ss.str().c_str());
+			}
+			else if(*tipo == TIPO_BYTE){
+				fprintf(out, "	byte ?; byte [%s] em %sh\n", lexe.c_str(), ss.str().c_str());
+			}
+			else if(*tipo == TIPO_LOGICO){
+				fprintf(out, "	byte ?; boolean [%s] em %sh\n", lexe.c_str(), ss.str().c_str());
+			}
 		}
 		else{
 			printf("%d:identificador ja declarado [%s].\n", linha, lexe.c_str());

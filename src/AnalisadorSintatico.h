@@ -7,6 +7,7 @@
 #include <iostream>
 #include <map>
 #include <fstream>
+#include <sstream>
 
 #include "AnalisadorLexico.h"
 #include "Global.h"

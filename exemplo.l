@@ -1,3 +1,10 @@
+integer A,B;
+const C='Oi, mundo.';
+string D;
+const E=1;
+const F=true;
+const G=false;
+const H=true;
 integer n;
 string nome;
 boolean naoTerminou;
@@ -6,6 +13,7 @@ integer x = 3;
 integer a;
 integer y;
 integer b, c;
+integer w = x;
 
 main
   y = 5;

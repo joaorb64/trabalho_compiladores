@@ -26,6 +26,8 @@ extern string lexema;
 //endereço de inserção na tabela (somente para identificadores e palavras reservadas)
 extern int posicao;
 
+extern int memoria;
+
 //tipo (somente para o token constante)
 enum TIPO{ TIPO_INTEIRO, TIPO_LOGICO, TIPO_BYTE, TIPO_STRING };
 extern int tipo_constante;

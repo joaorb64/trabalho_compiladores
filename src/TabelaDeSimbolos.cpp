@@ -36,8 +36,8 @@ TabelaDeSimbolos::TabelaDeSimbolos(){
 	AddSimbolo("readln", "readln");
 	AddSimbolo("write", "write");
 	AddSimbolo("writeln", "writeln");
-	AddSimbolo("true", "const");
-	AddSimbolo("false", "const");
+	AddSimbolo("true", "id", CLASSE_CONST, TIPO_LOGICO);
+	AddSimbolo("false", "id", CLASSE_CONST, TIPO_LOGICO);
 }
 
 string TabelaDeSimbolos::FindSimbolo(std::string lex){
@@ -61,6 +61,20 @@ int TabelaDeSimbolos::AddSimbolo(string lex, string tok, int classe, int tipo){
 		s.token = tok;
 		s.classe = classe;
 		s.tipo = tipo;
+
+		s.endereco = memoria;
+
+		if(tipo == TIPO_INTEIRO){
+			memoria += 2;
+		}
+		else if(tipo == TIPO_STRING){
+			if(classe == CLASSE_VAR){
+				memoria += 255;
+			}
+		}
+		else if(tipo == TIPO_BYTE || tipo == TIPO_LOGICO){
+			memoria += 1;
+		}
 
 		simbolos.insert ( std::pair<string, Simbolo>(lex, s) );
 
