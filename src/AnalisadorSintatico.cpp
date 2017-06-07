@@ -443,11 +443,14 @@ bool AnalisadorSintatico::Att(){
 
 // Write → ( write | writeln ) '(' Exp {, Exp} ')';
 bool AnalisadorSintatico::Write(){
+	bool quebraLinha = false;
+
 	if(token == "write"){
 		CasaToken("write");
 	}
 	else{
 		CasaToken("writeln");
+		quebraLinha = true;
 	}
 
 	CasaToken("(");
@@ -512,6 +515,14 @@ bool AnalisadorSintatico::Write(){
 		else{
 			CasaToken(",");
 		}
+	}
+
+	if(quebraLinha){
+		fprintf(out, "mov ah, 02h; quebra de linha\n");
+		fprintf(out, "mov dl, 0Dh\n");
+		fprintf(out, "int 21h\n");
+		fprintf(out, "mov dl, 0Ah\n");
+		fprintf(out, "int 21h\n");
 	}
 
 	CasaToken(")");
