@@ -76,6 +76,12 @@ bool AnalisadorSintatico::S(){
 	memoriaTemp = 0;
 	rotulo = 0;
 
+	fprintf(out, "cseg SEGMENT PUBLIC; inicio do seg. código\n");
+	fprintf(out, "ASSUME CS:cseg, DS:dseg\n");
+	fprintf(out, "_strt: ; inicio do programa\n");
+	fprintf(out, "mov ax, dseg\n");
+	fprintf(out, "mov ds, ax\n");
+
 	while(token == "decl" || token == "decl_const" || token == ";"){
 		if(token == "decl"){
 			Decl();
@@ -97,6 +103,11 @@ bool AnalisadorSintatico::S(){
 	if(token != ""){
 		printf("%d:Token não esperado [%s].\n", linha, token.c_str());
 	}
+
+	fprintf(out, "mov ah, 4Ch; termina o programa\n");
+	fprintf(out, "int 21h\n");
+	fprintf(out, "cseg ENDS; fim seg. código\n");
+	fprintf(out, "END _strt\n");
 }
 
 // Comm → ( Att | Rep | T | Read | Write | Nulo )
@@ -202,13 +213,13 @@ bool AnalisadorSintatico::Decl(){
 			}
 		}
 
-		fprintf(out, "	mov %s, DS:[%s]\n", regB.c_str(), ssB.str().c_str());
+		fprintf(out, "	mov %s, DS:[%sh]\n", regB.c_str(), ssB.str().c_str());
 
 		if(converter){
 			regB = "BX";
 		}
 
-		fprintf(out, "	mov DS:[%s], %s\n", ssA.str().c_str(), regB.c_str());
+		fprintf(out, "	mov DS:[%sh], %s\n", ssA.str().c_str(), regB.c_str());
 	}
 
 	while (token == ",") {
@@ -282,13 +293,13 @@ bool AnalisadorSintatico::Decl(){
 				}
 			}
 
-			fprintf(out, "	mov %s, DS:[%s]\n", regB.c_str(), ssB.str().c_str());
+			fprintf(out, "	mov %s, DS:[%sh]\n", regB.c_str(), ssB.str().c_str());
 
 			if(converter){
 				regB = "BX";
 			}
 
-			fprintf(out, "	mov DS:[%s], %s\n", ssA.str().c_str(), regB.c_str());
+			fprintf(out, "	mov DS:[%sh], %s\n", ssA.str().c_str(), regB.c_str());
 		}
 	}
 
@@ -311,28 +322,55 @@ bool AnalisadorSintatico::Const(){
 	Exp(tipo, end);
 	CasaToken(";");
 
-	fprintf(out, "dseg SEGMENT PUBLIC\n");
-
 	//Checar se já foi declarado
 	if(tok == "id"){
 		if(lex->t->FindSimbolo(lexe) == "NULL"){
-			std::stringstream ss;
-			ss << std::uppercase << std::hex << memoria;
+			fprintf(out, "dseg SEGMENT PUBLIC;\n");
 
 			lex->t->AddSimbolo(lexe, "id", CLASSE_CONST, *tipo);
 
-			if(*tipo == TIPO_STRING){
-				fprintf(out, "	byte \"%s$\"; byte [%s] em %sh\n", valor.c_str(), lexe.c_str(), ss.str().c_str());
-				memoria += valor.length() + 1;
-			}
-			else if(*tipo == TIPO_INTEIRO){
-				fprintf(out, "	sword ?; inteiro [%s] em %sh\n", lexe.c_str(), ss.str().c_str());
-			}
-			else if(*tipo == TIPO_BYTE){
-				fprintf(out, "	byte ?; byte [%s] em %sh\n", lexe.c_str(), ss.str().c_str());
-			}
-			else if(*tipo == TIPO_LOGICO){
-				fprintf(out, "	byte ?; boolean [%s] em %sh\n", lexe.c_str(), ss.str().c_str());
+			std::stringstream ssA, ssB;
+			ssA << std::uppercase << std::hex << lex->t->GetSimbolo(lexe)->endereco;
+			ssB << std::uppercase << std::hex << *end;
+
+			if (*tipo == TIPO_INTEIRO) {
+				fprintf(out, "	sword ?; inteiro [%s] em %sh\n", lexe.c_str(), ssA.str().c_str());
+				fprintf(out, "dseg ENDS;\n");
+				fprintf(out, "	mov BX, DS:[%sh]\n", ssB.str().c_str());
+				fprintf(out, "	mov DS:[%sh], BX\n", ssA.str().c_str());
+			} else if (*tipo == TIPO_BYTE) {
+				fprintf(out, "	byte ?; byte [%s] em %sh\n", lexe.c_str(), ssA.str().c_str());
+				fprintf(out, "dseg ENDS;\n");
+				fprintf(out, "	mov BX, DS:[%sh]\n", ssB.str().c_str());
+				fprintf(out, "	mov DS:[%sh], BX\n", ssA.str().c_str());
+			} else if (*tipo == TIPO_LOGICO) {
+				fprintf(out, "	byte ?; byte [%s] em %sh\n", lexe.c_str(), ssA.str().c_str());
+				fprintf(out, "dseg ENDS;\n");
+				fprintf(out, "	mov BL, DS:[%sh]\n", ssB.str().c_str());
+				fprintf(out, "	mov DS:[%sh], BL\n", ssA.str().c_str());
+			} else if (*tipo == TIPO_STRING) {
+				fprintf(out, "	byte 100h DUP(?); string [%s] em %sh\n", lexe.c_str(), ssA.str().c_str());
+				fprintf(out, "dseg ENDS;\n");
+
+				int rotInicio = NovoRot();
+				int rotFim = NovoRot();
+
+				fprintf(out, ";[While - Copia de string]\n");
+				fprintf(out, "	mov BX, %sh; guarda posicao inicial do string\n", ssA.str().c_str());
+				fprintf(out, "	mov CX, %sh; guarda posicao do temporario\n", ssB.str().c_str());
+				fprintf(out, "R%d:\n", rotInicio);
+				fprintf(out, "	mov DL, DS:[CX]; move temporario\n");
+				fprintf(out, "	cmp DL, 36; compara fim do string\n");
+				fprintf(out, "	je R%d\n", rotFim);
+
+				fprintf(out, "	mov AX, DS:[CX]; move do temporario\n");
+				fprintf(out, "	mov DS:[BX], AX; move para string\n");
+				fprintf(out, "	add CX, 1; aumenta ponteiro do temporario\n");
+				fprintf(out, "	add BX, 1; aumenta ponteiro do string\n");
+
+				fprintf(out, "jmp %d\n", rotInicio);
+				fprintf(out, "R%d:\n", rotFim);
+				fprintf(out, ";[While fim - Copia de string]\n");
 			}
 		}
 		else{
@@ -340,24 +378,6 @@ bool AnalisadorSintatico::Const(){
 			exit(0);
 		}
 	}
-
-	fprintf(out, "dseg ENDS;\n");
-
-	std::stringstream ssA, ssB;
-	ssA << std::uppercase << std::hex << lex->t->GetSimbolo(lexe)->endereco;
-	ssB << std::uppercase << std::hex << *end;
-
-	string regB;
-
-	if(*tipo == TIPO_INTEIRO){
-		regB = "BX";
-	}
-	else{
-		regB = "BL";
-	}
-
-	fprintf(out, "	mov %s, DS:[%s]\n", regB.c_str(), ssB.str().c_str());
-	fprintf(out, "	mov DS:[%s], %s\n", ssA.str().c_str(), regB.c_str());
 }
 
 // Att → id = Exp;
@@ -396,8 +416,7 @@ bool AnalisadorSintatico::Att(){
 	CasaToken(";");
 
 	std::stringstream ssA, ssB;
-	std::locale loc;
-	ssA << std::uppercase << std::hex << lex->t->GetSimbolo(lexema)->endereco;
+	ssA << std::uppercase << std::hex << lex->t->GetSimbolo(lexe)->endereco;
 	ssB << std::uppercase << std::hex << *end;
 
 	string regB;
@@ -413,13 +432,13 @@ bool AnalisadorSintatico::Att(){
 		}
 	}
 
-	fprintf(out, "	mov %s, DS:[%s]\n", regB.c_str(), ssB.str().c_str());
+	fprintf(out, "	mov %s, DS:[%sh]\n", regB.c_str(), ssB.str().c_str());
 
 	if(converter){
 		regB = "BX";
 	}
 
-	fprintf(out, "	mov DS:[%s], %s\n", ssA.str().c_str(), regB.c_str());
+	fprintf(out, "	mov DS:[%sh], %s\n", ssA.str().c_str(), regB.c_str());
 }
 
 // Write → ( write | writeln ) '(' Exp {, Exp} ')';
@@ -432,15 +451,67 @@ bool AnalisadorSintatico::Write(){
 	}
 
 	CasaToken("(");
-	int *tipo = new int(-1);
-	int *end = new int(-1);
-	Exp(tipo, end);
 
-	while(token == ","){
-		CasaToken(",");
-		int *tipoB = new int(-1);
-		int *endB = new int(-1);
-		Exp(tipoB, endB);
+	while (true){
+		int *tipo = new int(-1);
+		int *end = new int(-1);
+		Exp(tipo, end);
+
+		std::stringstream ss;
+		ss << std::uppercase << std::hex << *end;
+
+		int r0 = NovoRot();
+		int r1 = NovoRot();
+		int r2 = NovoRot();
+
+		if(*tipo == TIPO_INTEIRO){
+			fprintf(out, "mov ax, DS:[%sh] ;numero\n", ss.str().c_str());
+		}
+		else if(*tipo == TIPO_BYTE){
+			fprintf(out, "mov al, DS:[%sh] ;numero\n", ss.str().c_str());
+			fprintf(out, "mov ah, 0 ;numero\n");
+		}
+
+		fprintf(out, "mov di, DS:[%sh]; end. string temp\n", ss.str().c_str());
+		fprintf(out, "mov cx, 0 ;contador\n");
+		fprintf(out, "cmp ax,0 ;verifica sinal\n");
+		fprintf(out, "jge R%d  ;salta se número positivo\n", r0);
+		fprintf(out, "mov bl, 2Dh ;senão, escreve sinal –\n");
+		fprintf(out, "mov ds:[di], bl\n");
+		fprintf(out, "add di, 1 ;incrementa índice\n");
+		fprintf(out, "neg ax  ;toma módulo do número\n");
+		fprintf(out, "R%d:\n", r0);
+		fprintf(out, "mov bx, 10 ;divisor\n");
+		fprintf(out, "R%d:\n", r1);
+		fprintf(out, "add cx, 1 ;incrementa contador\n");
+		fprintf(out, "mov dx, 0 ;estende 32bits p/ div.\n");
+		fprintf(out, "idiv bx   ;divide DXAX por BX\n");
+		fprintf(out, "push dx  ;empilha valor do resto\n");
+		fprintf(out, "cmp ax, 0 ;verifica se quoc. é 0\n");
+		fprintf(out, "jne R%d  ;se não é 0, continua\n", r1);
+		fprintf(out, ";agora, desemp. os valores e escreve o string\n");
+		fprintf(out, "R%d:\n", r2);
+		fprintf(out, "pop dx  ;desempilha valor\n");
+		fprintf(out, "add dx, 30h ;transforma em caractere\n");
+		fprintf(out, "mov ds:[di],dl ;escreve caractere\n");
+		fprintf(out, "add di, 1 ;incrementa base\n");
+		fprintf(out, "add cx, -1 ;decrementa contador\n");
+		fprintf(out, "cmp cx, 0 ;verifica pilha vazia\n");
+		fprintf(out, "jne R%d  ;se não pilha vazia, loop\n", r2);
+		fprintf(out, ";grava fim de string\n");
+		fprintf(out, "mov dl, 024h ;fim de string\n");
+		fprintf(out, "mov ds:[di], dl ;grava $\n");
+		fprintf(out, ";exibe string\n");
+		fprintf(out, "mov dx, DS:[%sh]\n", ss.str().c_str());
+		fprintf(out, "mov ah, 09h\n");
+		fprintf(out, "int 21h\n");
+
+		if(token != ","){
+			break;
+		}
+		else{
+			CasaToken(",");
+		}
 	}
 
 	CasaToken(")");
@@ -481,7 +552,7 @@ bool AnalisadorSintatico::Rep(){
 	std::stringstream ss;
 	ss << std::uppercase << std::hex << *end;
 
-	fprintf(out, "	mov AL, DS:[%s]\n", ss.str().c_str());
+	fprintf(out, "	mov AL, DS:[%sh]\n", ss.str().c_str());
 	fprintf(out, "	cmp AL, FFh\n");
 	fprintf(out, "	jne R%d\n", rotFim);
 
@@ -523,7 +594,7 @@ bool AnalisadorSintatico::T(){
 	std::stringstream ss;
 	ss << std::uppercase << std::hex << *end;
 
-	fprintf(out, "	mov AL, DS:[%s]\n", ss.str().c_str());
+	fprintf(out, "	mov AL, DS:[%sh]\n", ss.str().c_str());
 	fprintf(out, "	cmp AL, FFh\n");
 	fprintf(out, "	jne R%d\n", rotFalso);
 
@@ -605,6 +676,7 @@ bool AnalisadorSintatico::Exp(int *tipo, int *endereco){
 // ExpA → [(+|-)] ExpB { (+|-|or) ExpB }
 bool AnalisadorSintatico::ExpA(int *tipo, int *endereco){
 	bool negativo = false;
+	bool converterA = false;
 
 	if(token == "+"){
 		CasaToken("+");
@@ -616,10 +688,21 @@ bool AnalisadorSintatico::ExpA(int *tipo, int *endereco){
 
 	ExpB(tipo, endereco);
 
-	if(negativo) *tipo = TIPO_INTEIRO; //TODO: string n pode ser negativada
+	if(negativo){
+		if(*tipo == TIPO_STRING || *tipo == TIPO_LOGICO){
+			printf("%d:tipos incompatíveis.\n", linha);
+			exit(0);
+		}
+		else if(*tipo == TIPO_BYTE){
+			*tipo = TIPO_INTEIRO;
+			converterA = true;
+		}
+	}
 
 	while(token == "+" || token == "-" || token == "or"){
 		bool soma = false;
+
+		string lexe = token;
 
 		if(token == "+"){
 			CasaToken("+");
@@ -632,13 +715,16 @@ bool AnalisadorSintatico::ExpA(int *tipo, int *endereco){
 		int *endB = new int(-1);
 		ExpB(tipoB, endB);
 
+		bool converterB = false;
+
 		if(*tipo != *tipoB){
 			if((*tipo != TIPO_BYTE && *tipo != TIPO_INTEIRO) || (*tipoB != TIPO_BYTE && *tipoB != TIPO_INTEIRO)) {
 				printf("%d:tipos incompatíveis.\n", linha);
 				exit(0);
 			}
-			else{
+			else if(*tipoB == TIPO_BYTE){
 				*tipo = TIPO_INTEIRO;
+				converterB = true;
 			}
 		}
 		else{
@@ -651,6 +737,97 @@ bool AnalisadorSintatico::ExpA(int *tipo, int *endereco){
 		if(*tipo == TIPO_LOGICO || *tipoB == TIPO_LOGICO){
 			printf("%d:tipos incompatíveis.\n", linha);
 			exit(0);
+		}
+
+		if(*tipo != TIPO_STRING){
+			std::stringstream ssA, ssB;
+			ssA << std::uppercase << std::hex << *endereco;
+			ssB << std::uppercase << std::hex << *endB;
+
+			string regA, regB;
+
+			if(*tipo == TIPO_INTEIRO){
+				if(converterA){
+					regA = "AL";
+				}
+				else{
+					regA = "AX";
+				}
+			}
+			else{
+				regA = "AL";
+			}
+
+			if(*tipoB == TIPO_INTEIRO){
+				if(converterB){
+					regB = "BL";
+				}
+				else{
+					regB = "BX";
+				}
+			}
+			else{
+				regB = "BL";
+			}
+
+			fprintf(out, "	;[soma]\n");
+
+			if(negativo){
+				int novoNeg = NovoTemp(2);
+
+				std::stringstream ssC;
+				ssC << std::uppercase << std::hex << novoNeg;
+
+				if(converterA){
+					fprintf(out, "	mov AH, 0\n");
+				}
+
+				fprintf(out, "	mov %s, DS:[%sh]\n", regA.c_str(), ssA.str().c_str());
+				fprintf(out, "	neg AX\n");
+				fprintf(out, "	mov DS:[%sh], AX\n", ssC.str().c_str());
+
+				*endereco = novoNeg;
+				ssA.str("");
+				ssA << ssC.str();
+			}
+
+			fprintf(out, "	mov %s, DS:[%sh]\n", regA.c_str(), ssA.str().c_str());
+
+			if(converterA){
+				fprintf(out, "	mov AH, 0\n");
+				regA = "AX";
+			}
+
+			fprintf(out, "	mov %s, DS:[%sh]\n", regB.c_str(), ssB.str().c_str());
+
+			if(converterB){
+				fprintf(out, "	mov BH, 0\n");
+				regB = "BX";
+			}
+
+			if(lexe == "+"){
+				fprintf(out, "	add %s, %s\n", regA.c_str(), regB.c_str());
+			}
+			else if(lexe == "-"){
+				fprintf(out, "	sub %s, %s\n", regA.c_str(), regB.c_str());
+			}
+
+			ssA.str("");
+
+			if(*tipo == TIPO_INTEIRO){
+				*endereco = NovoTemp(2);
+			}
+			else if(*tipo == TIPO_STRING){
+				*endereco = NovoTemp(256);
+			}
+			else{
+				*endereco = NovoTemp(1);
+			}
+
+			ssA << std::uppercase << std::hex << *endereco;
+
+			fprintf(out, "	mov DS:[%sh], %s\n", ssA.str().c_str(), regA.c_str());
+			fprintf(out, "	;[fim soma]\n");
 		}
 	}
 }
@@ -726,20 +903,34 @@ bool AnalisadorSintatico::ExpB(int *tipo, int *endereco){
 			regB = "BL";
 		}
 
-		fprintf(out, "	mov %s, DS:[%s]\n", regA.c_str(), ssA.str().c_str());
-		fprintf(out, "	mov %s, DS:[%s]\n", regB.c_str(), ssB.str().c_str());
+		fprintf(out, "	mov %s, DS:[%sh]\n", regA.c_str(), ssA.str().c_str());
+		fprintf(out, "	mov %s, DS:[%sh]\n", regB.c_str(), ssB.str().c_str());
 		// TODO: Verificar necessidade de conversão?
 		if(lexe == "and"){
-			fprintf(out, "	mov %s, DS:[%s]\n", regB.c_str(), ssA.str().c_str());
+			fprintf(out, "	mov %s, DS:[%sh]\n", regB.c_str(), ssA.str().c_str());
 		}
 		else if(lexe == "*"){
-			fprintf(out, "	mov %s, DS:[%s]\n", regB.c_str(), ssA.str().c_str());
+			fprintf(out, "	mov %s, DS:[%sh]\n", regB.c_str(), ssA.str().c_str());
 		}
 		else if(lexe == "/"){
-			fprintf(out, "	mov %s, DS:[%s]\n", regB.c_str(), ssA.str().c_str());
+			fprintf(out, "	mov %s, DS:[%sh]\n", regB.c_str(), ssA.str().c_str());
 		}
 
-		fprintf(out, "	mov DS:[%s], %s\n", ssA.str().c_str(), regA.c_str());
+		ssA.str("");
+
+		if(*tipo == TIPO_INTEIRO){
+			*endereco = NovoTemp(2);
+		}
+		else if(*tipo == TIPO_STRING){
+			*endereco = NovoTemp(256);
+		}
+		else{
+			*endereco = NovoTemp(1);
+		}
+
+		ssA << std::uppercase << std::hex << *endereco;
+
+		fprintf(out, "	mov DS:[%sh], %s\n", ssA.str().c_str(), regA.c_str());
 	}
 }
 
@@ -763,9 +954,9 @@ bool AnalisadorSintatico::ExpC(int *tipo, int *endereco){
 		std::locale loc;
 		ss << std::uppercase << std::hex << *endereco;
 
-		fprintf(out, "	mov AL, DS:[%s]\n", ss.str().c_str());
+		fprintf(out, "	mov AL, DS:[%sh]\n", ss.str().c_str());
 		fprintf(out, "	not AL\n");
-		fprintf(out, "	mov DS:[%s], AL\n", ss.str().c_str());
+		fprintf(out, "	mov DS:[%sh], AL\n", ss.str().c_str());
 	}
 }
 
@@ -793,13 +984,12 @@ bool AnalisadorSintatico::ExpD(int *tipo, int *endereco){
 		std::locale loc;
 
 		if(tipo_constante == TIPO_STRING){
-			ss << std::uppercase << std::hex << memoria;
+			ss << std::uppercase << std::hex << memoriaTemp;
 
-			fprintf(out, "dseg SEGMENT PUBLIC\n");
-			fprintf(out, "	byte \"%s$\"; (Exp) string em %sh\n", lexema.c_str(), ss.str().c_str());
-			fprintf(out, "dseg ENDS\n");
+			*endereco = NovoTemp(256);
 
-			*endereco = memoria;
+			fprintf(out, "	mov DS:[%sh], \"%s$\"; (Exp) string em %sh\n", ss.str().c_str(), lexema.c_str(), ss.str().c_str());
+
 			memoria += lexema.length() + 1;
 		}
 		else{
@@ -808,12 +998,12 @@ bool AnalisadorSintatico::ExpD(int *tipo, int *endereco){
 			if(tipo_constante == TIPO_INTEIRO){
 				*endereco = NovoTemp(2);
 				fprintf(out, "	mov AX, %s\n", lexema.c_str());
-				fprintf(out, "	mov DS:[%s], AX\n", ss.str().c_str());
+				fprintf(out, "	mov DS:[%sh], AX\n", ss.str().c_str());
 			}
 			else{
 				*endereco = NovoTemp(1);
 				fprintf(out, "	mov AL, %s\n", lexema.c_str());
-				fprintf(out, "	mov DS:[%s], AL\n", ss.str().c_str());
+				fprintf(out, "	mov DS:[%sh], AL\n", ss.str().c_str());
 			}
 		}
 
